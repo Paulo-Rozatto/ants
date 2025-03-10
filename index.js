@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Ant } from './src/ant.js';
 
 const grid_size = 10;
 const initial_x = -44.5;
 const initial_z = 44.5;
-const decay_factor = 0.7;
+const decay_factor = 0.75;
+
 
 // Scenario
 
@@ -15,8 +17,8 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 const ambient_light = new THREE.AmbientLight(0x404040); // soft white light
 scene.add(ambient_light);
 
-const point_light = new THREE.PointLight(0xff0000, 10, 500, 0);
-point_light.position.set(0, 10, 0);
+const point_light = new THREE.PointLight(0xffffff, 20, 500, 0);
+point_light.position.set(0, 30, 0);
 scene.add(point_light);
 
 const raycaster = new THREE.Raycaster();
@@ -35,7 +37,7 @@ const plane = new THREE.Group()
 
 for (let i = 0; i < grid_size; i++) {
     for (let j = 0; j < grid_size; j++) {
-        const plane_material = new THREE.MeshPhongMaterial({ color: 'hsl(28, 100%, 100%)', side: THREE.DoubleSide, wireframe: false, shininess: 0 });
+        const plane_material = new THREE.MeshPhongMaterial({ color: 'hsl(28, 100.0%, 30.00%)', side: THREE.DoubleSide, wireframe: false, shininess: 0 });
         const tile = new THREE.Mesh(plane_geometry, plane_material);
         tile.rotation.x = -Math.PI * 0.5;
         tile.position.x = 10 * (i - grid_size / 2) + 5;
@@ -61,12 +63,51 @@ gridHelper.position.y += 0.1
 
 camera.position.set(-10, 50, 120);
 new OrbitControls(camera, renderer.domElement);
+// Loader
 
-
+// loader
+const loader = new GLTFLoader();
+let ant_model;
 const ants = [];
-for (let i = 0; i < 10; i++) {
-    ants.push(new Ant(scene, grid_size, initial_x, initial_z));
-}
+
+loader.load(
+    // resource URL
+    'public/ant.glb',
+    // called when the resource is loaded
+    function (gltf) {
+
+        // scene.add(gltf.scene);
+        ant_model = gltf.scene;
+        for (let i = 0; i < 10; i++) {
+            ants.push(new Ant(scene, ant_model, grid_size, initial_x, initial_z));
+        }
+
+        // gltf.animations; // Array<THREE.AnimationClip>
+        // gltf.scene; // THREE.Group
+        // gltf.scenes; // Array<THREE.Group>
+        // gltf.cameras; // Array<THREE.Camera>
+        // gltf.asset; // Object
+
+    },
+    // called while loading is progressing
+    function (xhr) {
+
+        console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+
+    },
+    // called when loading has errors
+    function (error) {
+
+        console.log('An error happened', error);
+
+    }
+);
+
+
+// Ants
+
+
+
 
 const food_geometry = new THREE.ConeGeometry(3, 6);
 const foot_material = new THREE.MeshBasicMaterial({ color: 0x55AA00 })
@@ -143,20 +184,25 @@ function choose(ant) {
 
 function update() {
     let max = 1;
+    let count = 0;
 
     for (let i = 1; i < ants.length; i++) {
-        if (ants[i].found_food && ants[i].hist.length > max) {
-            max = ants[i].hist.length;
+        if (ants[i].found_food) {
+            count++;
+
+            if (ants[i].hist.length > max) {
+                max = ants[i].hist.length;
+            }
         }
     }
 
     for (let i = 0; i < grid_size; i++) {
         for (let j = 0; j < grid_size; j++) {
-
             for (const ant of ants) {
+
                 if (ant.grid[i][j]) {
                     if (ant.found_food) {
-                        world[i][j] += 2 + 2 * (max / ant.hist.length);
+                        world[i][j] += 4 + 10 * (max / ant.hist.length);
                     }
                     // else {
                     //     world[i][j] *= decay_factor;
@@ -172,7 +218,7 @@ function update() {
 
             world[i][j] *= decay_factor;
             let k = grid_size - 1 - j;
-            plane.children[i * grid_size + k].children[0].material.color.set(`hsl(28, 100%, ${Math.min(100, Math.round(world[i][j]))}%)`)
+            plane.children[i * grid_size + k].children[0].material.color.set(`hsl(28, ${Math.max(0, 100 - Math.round(world[i][j]))}%, 30%)`)
         }
     }
 
@@ -185,10 +231,12 @@ function update() {
 function go(it, max_it) {
     move_flag = false;
     ants.forEach(ant => choose(ant));
+    let timeout = 20;
 
     if (!move_flag) {
         update();
         it++;
+        timeout = 100;
     }
 
     if (it < max_it) {
@@ -196,7 +244,7 @@ function go(it, max_it) {
 
         setTimeout(() => {
             go(it, max_it)
-        }, 1);
+        }, timeout);
         ;
     }
 }
@@ -228,9 +276,8 @@ addEventListener('pointermove', (e) => {
 })
 
 addEventListener('pointerup', () => {
-    console.log(intersects);
     for (let i = 0; i < intersects.length; i++) {
-        intersects[i].object.parent.visible = false
+        intersects[i].object.parent.visible = !intersects[i].object.parent.visible;
     }
 });
 
