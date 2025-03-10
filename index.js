@@ -2,31 +2,66 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Ant } from './src/ant.js';
 
+const grid_size = 10;
+const initial_x = -44.5;
+const initial_z = 44.5;
+const decay_factor = 0.7;
+
+// Scenario
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+const ambient_light = new THREE.AmbientLight(0x404040); // soft white light
+scene.add(ambient_light);
+
+const point_light = new THREE.PointLight(0xff0000, 10, 500, 0);
+point_light.position.set(0, 10, 0);
+scene.add(point_light);
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const plane_geometry = new THREE.PlaneGeometry(100, 100, 10, 10);
-const plane_material = new THREE.MeshBasicMaterial({ color: 0xFF7700, side: THREE.DoubleSide, wireframe: false });
-const plane = new THREE.Mesh(plane_geometry, plane_material);
-plane.rotation.x = - Math.PI / 2;
+// -- ground tiles
+const plane_geometry = new THREE.PlaneGeometry(10, 10);
+const edge_geometry = new THREE.EdgesGeometry(plane_geometry);
+const edge_material = new THREE.LineBasicMaterial({ color: 0xffffff })
+
+const plane = new THREE.Group()
+
+for (let i = 0; i < grid_size; i++) {
+    for (let j = 0; j < grid_size; j++) {
+        const plane_material = new THREE.MeshPhongMaterial({ color: 'hsl(28, 100%, 100%)', side: THREE.DoubleSide, wireframe: false, shininess: 0 });
+        const tile = new THREE.Mesh(plane_geometry, plane_material);
+        tile.rotation.x = -Math.PI * 0.5;
+        tile.position.x = 10 * (i - grid_size / 2) + 5;
+        tile.position.z = 10 * (j - grid_size / 2) + 5;
+
+        const edge = new THREE.LineSegments(edge_geometry, edge_material);
+        edge.position.copy(tile.position);
+        edge.position.y += 0.1;
+        edge.rotation.copy(tile.rotation);
+
+        const group = new THREE.Group();
+        group.add(tile);
+        group.add(edge);
+        plane.add(group);
+    }
+}
+
 scene.add(plane);
 
 const gridHelper = new THREE.GridHelper(100, 10, 0xffffff, 0xffffff);
 gridHelper.position.y += 0.1
-scene.add(gridHelper);
+// scene.add(gridHelper);
 
 camera.position.set(-10, 50, 120);
 new OrbitControls(camera, renderer.domElement);
 
-const grid_size = 10;
-const initial_x = -44.5;
-const initial_z = 44.5;
-const decay_factor = 0.8;
 
 const ants = [];
 for (let i = 0; i < 10; i++) {
@@ -123,9 +158,9 @@ function update() {
                     if (ant.found_food) {
                         world[i][j] += 2 + 2 * (max / ant.hist.length);
                     }
-                    else {
-                        world[i][j] *= decay_factor;
-                    }
+                    // else {
+                    //     world[i][j] *= decay_factor;
+                    // }
                 }
 
                 ant.grid[i][j] = false;
@@ -136,6 +171,8 @@ function update() {
             }
 
             world[i][j] *= decay_factor;
+            let k = grid_size - 1 - j;
+            plane.children[i * grid_size + k].children[0].material.color.set(`hsl(28, 100%, ${Math.min(100, Math.round(world[i][j]))}%)`)
         }
     }
 
@@ -173,14 +210,33 @@ addEventListener('keyup', (e) => {
             go(0, 30)
             break;
         case 'r':
-            // update();
             console.log(world);
             break;
 
     }
 })
 
+const intersects = [];
+
+addEventListener('pointermove', (e) => {
+    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = - (e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointer, camera);
+    intersects.length = 0;
+    raycaster.intersectObjects(plane.children, true, intersects);
+})
+
+addEventListener('pointerup', () => {
+    console.log(intersects);
+    for (let i = 0; i < intersects.length; i++) {
+        intersects[i].object.parent.visible = false
+    }
+});
+
 function animate() {
+
+
     renderer.render(scene, camera);
 }
 
